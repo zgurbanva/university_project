@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chomp - Ultimate Neon Edition</title>
+    <style>
+        /* Futuristic Deep Purple Styling */
+        body { 
+            background-color: #0d001a; 
+            color: #d580ff; 
+            font-family: 'Courier New', Courier, monospace; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #mainContainer { 
+            background: #1a0033; 
+            padding: 20px; 
+            border: 2px solid #b300ff; 
+            border-radius: 10px; 
+            box-shadow: 0 0 15px #b300ff; 
+            text-align: center; 
+            max-width: 900px;
+            width: 100%;
+        }
+        canvas { 
+            box-shadow: 0 0 20px rgba(179, 0, 255, 0.5); 
+            background: #000;
+            cursor: crosshair; 
+            margin-top: 15px;
+        }
+        input, button, select { 
+            background: #2a004d; 
+            color: #d580ff; 
+            border: 1px solid #b300ff; 
+            padding: 10px; 
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 16px; 
+            margin: 5px; 
+        }
+        button { cursor: pointer; font-weight: bold; }
+        button:hover { background: #b300ff; color: #fff; box-shadow: 0 0 10px #b300ff; }
+        h1, h2 { text-transform: uppercase; margin: 10px 0; text-shadow: 0 0 10px #b300ff; }
+        
+        .winner-screen { 
+            font-size: 48px; 
+            color: #ff33cc; 
+            text-shadow: 0 0 20px #ff33cc; 
+            display: none; 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            background: rgba(13,0,26,0.95); 
+            padding: 40px; 
+            border: 4px solid #ff33cc; 
+            border-radius: 20px;
+            text-align: center;
+        }
+        
+        #hoverInfo {
+            color: #00ffcc;
+            font-size: 18px;
+            font-weight: bold;
+            height: 25px; 
+            margin: 10px 0;
+            text-shadow: 0 0 5px #00ffcc;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        #gameControls { display: none; }
+        #setupControls { display: block; }
+    </style>
+</head>
+<body>
+
+<div id="mainContainer">
+    <h1>Chomp (Neon Purple Protocol)</h1>
+
+    <div id="setupControls">
+        <p>Initialize System Grid Dimensions</p>
+        <input type="number" id="mInput" placeholder="Rows (m)" value="10" min="1">
+        <input type="number" id="nInput" placeholder="Cols (n)" value="10" min="1">
+        <br>
+        <p>Select Poison Location</p>
+        <select id="poisonLoc">
+            <option value="top-left">Top-Left (Standard)</option>
+            <option value="bottom-left">Bottom-Left</option>
+        </select>
+        <br><br>
+        <button onclick="startGame()">INITIALIZE PROTOCOL</button>
+    </div>
+
+    <div id="gameControls">
+        <h2 id="turnDisplay">Player 1's Turn</h2>
+        <div id="hoverInfo">Target: [ - , - ]</div>
+        <canvas id="board" width="800" height="500"></canvas>
+        
+        <div class="controls-row">
+            <div>
+                <input type="number" id="manualRow" placeholder="Target Row" min="0">
+                <input type="number" id="manualCol" placeholder="Target Col" min="0">
+                <button onclick="makeManualMove()">MANUAL CHOMP</button>
+            </div>
+        </div>
+        <p style="font-size: 14px; color: #e6b3ff;">Note: You can click the exact coordinate directly on the grid OR use the manual input boxes.</p>
+    </div>
+</div>
+
+<div id="winnerScreen" class="winner-screen">
+    <div id="winnerText">PLAYER X WINS!</div>
+    <div style="font-size: 20px; margin-top: 10px; margin-bottom: 20px;">Poisoned block was consumed.</div>
+    <button class="reboot-btn" onclick="location.reload()" style="border-color:#ff33cc; color:#ff33cc;">REBOOT SYSTEM</button>
+</div>
+
+<script>
+    let m, n, rows, player, gameOver, poisonLoc;
+    
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    function startGame() {
+        m = parseInt(document.getElementById('mInput').value);
+        n = parseInt(document.getElementById('nInput').value);
+        poisonLoc = document.getElementById('poisonLoc').value;
+        
+        if (isNaN(m) || isNaN(n) || m <= 0 || n <= 0) {
+            alert("Please enter valid positive integers for m and n.");
+            return;
+        }
+        
+        rows = new Array(m).fill(n);
+        player = 1;      
+        gameOver = false;
+        
+        document.getElementById('setupControls').style.display = 'none';
+        document.getElementById('gameControls').style.display = 'block';
+        
+        drawBoard();
+        updateTurnDisplay();
+    }
+
+    function drawBoard() {
+        ctx.clearRect(0, 0, W, H);
+        if (rows[0] === 0) return;
+        
+        const cellW = W / Math.max(1, n);
+        const cellH = H / Math.max(1, m);
+        
+        ctx.save();
+        
+        // Flipping Magic: vertical flip only to put the poison at the BOTTOM-LEFT
+        if (poisonLoc === 'bottom-left') {
+            ctx.translate(0, H);
+            ctx.scale(1, -1);
+        }
+        
+        ctx.fillStyle = '#1a0033';
+        ctx.strokeStyle = '#b300ff';
+        ctx.lineWidth = 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        ctx.lineTo(0, 0);
+        
+        for (let r = 0; r < m; r++) {
+            const yTop = r * cellH;
+            const yBottom = (r + 1) * cellH;
+            const xRight = rows[r] * cellW;
+            
+            ctx.lineTo(xRight, yTop);
+            ctx.lineTo(xRight, yBottom);
+        }
+        
+        ctx.lineTo(0, H);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        if (m <= 50 && n <= 50) {
+            ctx.strokeStyle = '#660099';
+            ctx.lineWidth = 1;
+            for (let r = 0; r < m; r++) {
+                for (let c = 0; c < rows[r]; c++) {
+                    ctx.strokeRect(c * cellW, r * cellH, cellW, cellH);
+                }
+            }
+        }
+        
+        if (rows[0] > 0) {
+            let px = Math.max(cellW, 5), py = Math.max(cellH, 5);
+            ctx.fillStyle = '#ff0066';
+            ctx.fillRect(0, 0, px, py);
+            ctx.strokeStyle = '#ffb3d9';
+            ctx.strokeRect(0, 0, px, py);
+            
+            if (px > 20 && py > 20) {
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${Math.min(py * 0.8, 24)}px Courier`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Keep 'P' standing up straight
+                if(poisonLoc === 'bottom-left') {
+                    ctx.save();
+                    ctx.translate(px/2, py/2);
+                    ctx.scale(1, -1);
+                    ctx.fillText('P', 0, 0);
+                    ctx.restore();
+                } else {
+                    ctx.fillText('P', px/2, py/2);
+                }
+            }
+        }
+        ctx.restore(); 
+    }
+    
+    function processMove(backend_r, backend_c) {
+        if (backend_r === 0 && backend_c === 0) {
+            gameOver = true;
+            rows.fill(0); 
+            drawBoard();
+            document.getElementById('hoverInfo').innerText = "SYSTEM FATAL ERROR!";
+            showWinner(3 - player); 
+            return;
+        }
+        
+        for (let i = backend_r; i < m; i++) {
+            if (rows[i] > backend_c) rows[i] = backend_c;
+        }
+        
+        player = 3 - player;
+        drawBoard();
+        updateTurnDisplay();
+    }
+
+    canvas.addEventListener('click', function(event) {
+        if (gameOver) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        
+        const cellW = W / Math.max(1, n);
+        const cellH = H / Math.max(1, m);
+        let c = Math.floor(x / cellW);
+        let r = Math.floor(y / cellH);
+        
+        if (poisonLoc === 'bottom-left') {
+            r = (m - 1) - r;
+            // c remains the same
+        }
+        
+        if (r >= 0 && r < m && c >= 0 && c < rows[r]) {
+            processMove(r, c);
+        }
+    });
+
+    canvas.addEventListener('mousemove', function(event) {
+        if (gameOver) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const cellW = W / Math.max(1, n);
+        const cellH = H / Math.max(1, m);
+        
+        let visual_c = Math.floor(x / cellW);
+        let visual_r = Math.floor(y / cellH);
+        
+        let backend_c = visual_c;
+        let backend_r = poisonLoc === 'bottom-left' ? (m - 1) - visual_r : visual_r;
+        
+        if (backend_r >= 0 && backend_r < m && backend_c >= 0 && backend_c < rows[backend_r]) {
+            document.getElementById('hoverInfo').innerText = `Target: [ Row: ${visual_r}, Col: ${visual_c} ]`;
+            document.getElementById('hoverInfo').style.color = "#00ffcc";
+        } else {
+            document.getElementById('hoverInfo').innerText = `Target: [ Out of Bounds ]`;
+            document.getElementById('hoverInfo').style.color = "#ff0066";
+        }
+    });
+
+    canvas.addEventListener('mouseleave', function() {
+        if (!gameOver) document.getElementById('hoverInfo').innerText = `Target: [ - , - ]`;
+    });
+
+    function makeManualMove() {
+        if (gameOver) return;
+        const visual_r = parseInt(document.getElementById('manualRow').value);
+        const visual_c = parseInt(document.getElementById('manualCol').value);
+        
+        if (isNaN(visual_r) || isNaN(visual_c)) {
+            alert("Invalid Manual Move. Target is out of bounds.");
+            return;
+        }
+        
+        let backend_r = poisonLoc === 'bottom-left' ? (m - 1) - visual_r : visual_r;
+        let backend_c = visual_c;
+        
+        if (backend_r < 0 || backend_r >= m || backend_c < 0 || backend_c >= rows[backend_r]) {
+            alert("Invalid Manual Move. Target is out of bounds or already consumed.");
+            return;
+        }
+        
+        document.getElementById('manualRow').value = '';
+        document.getElementById('manualCol').value = '';
+        processMove(backend_r, backend_c);
+    }
+    
+    function updateTurnDisplay() {
+        document.getElementById('turnDisplay').innerText = `Player ${player}'s Turn`;
+        document.getElementById('turnDisplay').style.color = player === 1 ? '#d580ff' : '#00ffcc';
+    }
+    
+    function showWinner(winner) {
+        document.getElementById('winnerScreen').style.display = 'block';
+        document.getElementById('winnerText').innerText = `PLAYER ${winner} WINS!`;
+    }
+</script>
+</body>
+</html>
