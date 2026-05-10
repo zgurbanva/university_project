@@ -111,8 +111,8 @@
         
         <div class="controls-row">
             <div>
-                <input type="number" id="manualRow" placeholder="Target Row" min="0">
-                <input type="number" id="manualCol" placeholder="Target Col" min="0">
+                <input type="number" id="manualRow" placeholder="Target Row" min="1">
+                <input type="number" id="manualCol" placeholder="Target Col" min="1">
                 <button onclick="makeManualMove()">MANUAL CHOMP</button>
             </div>
         </div>
@@ -127,12 +127,28 @@
 </div>
 
 <script>
+    /* 
+     * GLOBAL VARIABLES:
+     * - `m`: Number of rows in the grid
+     * - `n`: Number of columns in the grid
+     * - `rows`: A 1D array representing the state of the grid. 
+     *           The index `i` is the row number.
+     *           The value `rows[i]` is the number of remaining columns in that row.
+     * - `player`: an integer (1 or 2) showing whose turn it currently is.
+     * - `gameOver`: boolean flag to stop play when the poison is eaten.
+     * - `poisonLoc`: string indicating "top-left" or "bottom-left" start position.
+     */
     let m, n, rows, player, gameOver, poisonLoc;
     
+    // Grab the canvas and initialize its 2D context for drawing visuals
     const canvas = document.getElementById('board');
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
 
+    /**
+     * Extracts values from the input fields and sets up the game's initial state.
+     * Called when the user clicks 'INITIALIZE PROTOCOL'.
+     */
     function startGame() {
         m = parseInt(document.getElementById('mInput').value);
         n = parseInt(document.getElementById('nInput').value);
@@ -154,95 +170,146 @@
         updateTurnDisplay();
     }
 
+    /**
+     * Renders the game board on the HTML5 Canvas.
+     * Uses a highly efficient path-tracing approach for the whole grid 
+     * instead of drawing millions of tiny squares.
+     */
     function drawBoard() {
-        ctx.clearRect(0, 0, W, H);
+        ctx.clearRect(0, 0, W, H); // Clear previous frame
+        
+        // If the very first cell is 0, the entire grid is gone
         if (rows[0] === 0) return;
         
+        // Calculate the maximum mathematical width and height of each block
         const cellW = W / Math.max(1, n);
         const cellH = H / Math.max(1, m);
         
+        // Save the canvas state before applying geometric transforms
         ctx.save();
         
-        // Flipping Magic: vertical flip only to put the poison at the BOTTOM-LEFT
+        /*
+         * Flipping Magic: To display the origin (the poison) at the BOTTOM-LEFT,
+         * we physically move the canvas origin down and flip the Y-axis.
+         * The underlying game logic (where index 0 is the poison) remains identical.
+         */
         if (poisonLoc === 'bottom-left') {
-            ctx.translate(0, H);
-            ctx.scale(1, -1);
+            ctx.translate(0, H);  // Move origin to the bottom of the canvas
+            ctx.scale(1, -1);     // Multiply all Y rendering coordinates by -1 (mirroring the canvas across X-axis)
         }
         
+        // Style variables: Dark background fill, and bright purple border logic
         ctx.fillStyle = '#1a0033';
         ctx.strokeStyle = '#b300ff';
         ctx.lineWidth = 2;
         
+        // Tracing the exact exterior outline of the grid
+        // Start from origin (which might be visually top-left or visually bottom-left)
         ctx.beginPath();
-        ctx.moveTo(0, H);
-        ctx.lineTo(0, 0);
+        ctx.moveTo(0, H); // Bottom-most possible boundary outline (on canvas terms)
+        ctx.lineTo(0, 0); // Origin coordinate (0,0) - our anchor where the poison starts
         
+        /*
+         * Iterate through the active mathematical rows in our 1D array.
+         * Draw lines around the outer edges (right boundary and bottom boundary)
+         * to form one massive unbroken polygon, enabling O(M) rendering time!
+         */
         for (let r = 0; r < m; r++) {
-            const yTop = r * cellH;
-            const yBottom = (r + 1) * cellH;
-            const xRight = rows[r] * cellW;
+            const yTop = r * cellH;          // Top visual vertical boundary of the row
+            const yBottom = (r + 1) * cellH; // Bottom visual vertical boundary of the row
+            const xRight = rows[r] * cellW;  // The rightmost boundary given by remaining column length
             
+            // Draw line horizontally across the top to the current right boundary
             ctx.lineTo(xRight, yTop);
+            
+            // Draw line vertically down to the bottom boundary for this row
             ctx.lineTo(xRight, yBottom);
         }
         
+        // Finish the shape securely back to the origin line
         ctx.lineTo(0, H);
         ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        ctx.fill();   // Paint the shape
+        ctx.stroke(); // Detail the border
         
+        /*
+         * Draw internal grid lines only if the grid is reasonably small.
+         * A 10000x10000 nested loop would freeze modern browsers!
+         */
         if (m <= 50 && n <= 50) {
             ctx.strokeStyle = '#660099';
             ctx.lineWidth = 1;
             for (let r = 0; r < m; r++) {
                 for (let c = 0; c < rows[r]; c++) {
-                    ctx.strokeRect(c * cellW, r * cellH, cellW, cellH);
+                    ctx.strokeRect(c * cellW, r * cellH, cellW, cellH); // Draw each individual grid block
                 }
             }
         }
         
+        // Render the Poison icon at block index (0,0) 
+        // Note: Visually it will be bottom-left if the canvas was scaled/flipped
         if (rows[0] > 0) {
-            let px = Math.max(cellW, 5), py = Math.max(cellH, 5);
+            let px = Math.max(cellW, 5), py = Math.max(cellH, 5); // Ensure the poison has at least *some* pixel footprint
+            
             ctx.fillStyle = '#ff0066';
             ctx.fillRect(0, 0, px, py);
             ctx.strokeStyle = '#ffb3d9';
             ctx.strokeRect(0, 0, px, py);
             
+            // Render the "P" text only if the block is wide enough to make it legible
             if (px > 20 && py > 20) {
                 ctx.fillStyle = '#fff';
                 ctx.font = `bold ${Math.min(py * 0.8, 24)}px Courier`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
-                // Keep 'P' standing up straight
+                /*
+                 * Orientation Hack: Keep the letter 'P' standing upright!
+                 * Because the entire canvas was inverted on the Y-Axis earlier,
+                 * we have to reverse that inversion just for this string of text.
+                 */
                 if(poisonLoc === 'bottom-left') {
                     ctx.save();
-                    ctx.translate(px/2, py/2);
-                    ctx.scale(1, -1);
-                    ctx.fillText('P', 0, 0);
+                    ctx.translate(px/2, py/2); // Center on the poison block
+                    ctx.scale(1, -1);          // Un-flip the Y-Axis 
+                    ctx.fillText('P', 0, 0);   // Draw the letter at new localized origin (0,0)
                     ctx.restore();
                 } else {
-                    ctx.fillText('P', px/2, py/2);
+                    ctx.fillText('P', px/2, py/2); // Standard drawing without transform restoration
                 }
             }
         }
+        
+        // Finalize drawing changes - restore context to normal un-flipped state just in case
         ctx.restore(); 
     }
     
+    /**
+     * Executes the core game logic when a valid move is requested.
+     * Truncates the mathematical grid arrays to simulate the "mouth" eating chocolates.
+     */
     function processMove(backend_r, backend_c) {
+        // Did the player eat the poison block at index (0,0)?
         if (backend_r === 0 && backend_c === 0) {
             gameOver = true;
-            rows.fill(0); 
-            drawBoard();
+            rows.fill(0); // Erase grid
+            drawBoard();  // Update visual state
             document.getElementById('hoverInfo').innerText = "SYSTEM FATAL ERROR!";
-            showWinner(3 - player); 
+            showWinner(3 - player); // Display the victor (the other player)
             return;
         }
         
+        /* 
+         * Algorithm optimization: Instead of wiping a 2D matrix column by column,
+         * we loop linearly through the row lengths. 
+         * For the targeted row (and any above it), its new length is capped at 'backend_c'.
+         * This causes a huge rectangular chunk to be immediately "eaten" out of the grid bounds!
+         */
         for (let i = backend_r; i < m; i++) {
-            if (rows[i] > backend_c) rows[i] = backend_c;
+            if (rows[i] > backend_c) rows[i] = backend_c; 
         }
         
+        // Pass play to next individual and re-render standard state
         player = 3 - player;
         drawBoard();
         updateTurnDisplay();
@@ -285,7 +352,7 @@
         let backend_r = poisonLoc === 'bottom-left' ? (m - 1) - visual_r : visual_r;
         
         if (backend_r >= 0 && backend_r < m && backend_c >= 0 && backend_c < rows[backend_r]) {
-            document.getElementById('hoverInfo').innerText = `Target: [ Row: ${visual_r}, Col: ${visual_c} ]`;
+            document.getElementById('hoverInfo').innerText = `Target: [ Row: ${backend_r + 1}, Col: ${backend_c + 1} ]`;
             document.getElementById('hoverInfo').style.color = "#00ffcc";
         } else {
             document.getElementById('hoverInfo').innerText = `Target: [ Out of Bounds ]`;
@@ -299,16 +366,17 @@
 
     function makeManualMove() {
         if (gameOver) return;
-        const visual_r = parseInt(document.getElementById('manualRow').value);
-        const visual_c = parseInt(document.getElementById('manualCol').value);
+        const target_r = parseInt(document.getElementById('manualRow').value);
+        const target_c = parseInt(document.getElementById('manualCol').value);
         
-        if (isNaN(visual_r) || isNaN(visual_c)) {
+        if (isNaN(target_r) || isNaN(target_c)) {
             alert("Invalid Manual Move. Target is out of bounds.");
             return;
         }
         
-        let backend_r = poisonLoc === 'bottom-left' ? (m - 1) - visual_r : visual_r;
-        let backend_c = visual_c;
+        // Convert from 1-based indexing relative to the poison block into 0-based backend indices
+        let backend_r = target_r - 1;
+        let backend_c = target_c - 1;
         
         if (backend_r < 0 || backend_r >= m || backend_c < 0 || backend_c >= rows[backend_r]) {
             alert("Invalid Manual Move. Target is out of bounds or already consumed.");

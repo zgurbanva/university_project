@@ -1,18 +1,24 @@
 def greedy_change(coins, amount):
     """
     Computes the change using the Greedy Algorithm.
-    It takes the largest possible coin until the amount is zero.
+    The Greedy Algorithm makes the locally optimal choice at each step.
+    In this case, it continuously takes the largest possible coin denomination 
+    that is less than or equal to the remaining amount.
     """
+    # Sort coins in descending order to always try the largest coin first
     coins_sorted = sorted(coins, reverse=True)
     result = []
     current_amount = amount
     
+    # Iterate through the available coin denominations
     for coin in coins_sorted:
+        # While the current accumulated amount is large enough to use this coin
         while current_amount >= coin:
-            result.append(coin)
-            current_amount -= coin
+            result.append(coin)       # Add the coin to our result list
+            current_amount -= coin    # Subtract the coin's value from the remaining amount
             
-    # If the exact amount cannot be made, return what we have (or an error)
+    # If after checking all coins the remaining amount is not exactly zero,
+    # it means the given denominations cannot make the exact change greedily.
     if current_amount > 0:
         return None 
     return result
@@ -20,37 +26,46 @@ def greedy_change(coins, amount):
 def optimal_change(coins, amount):
     """
     Computes the exact smallest number of coins using Dynamic Programming (DP).
-    This guarantees finding the true mathematical minimum.
+    Unlike the Greedy approach, DP guarantees finding the true mathematical minimum
+    by solving subproblems and building up globally optimal solutions.
     """
-    # dp[i] stores the minimum number of coins to make amount i
+    # dp[i] stores the minimum number of coins needed to make the amount i.
+    # Initialize all values to infinity, meaning "unreachable mathematically so far".
     dp = [float('inf')] * (amount + 1)
-    dp[0] = 0
+    dp[0] = 0 # Base case: 0 coins are needed to make an amount of 0.
     
-    # Store the first coin added to trace back the actual coins used
+    # Store the first coin added at each step to allow reconstructing the final answer.
     coin_used = [-1] * (amount + 1)
     
+    # Iterate through every amount from 1 up to the target budget
     for i in range(1, amount + 1):
+        # Try every available coin denomination
         for coin in coins:
+            # If the coin can contribute to the current amount 'i', 
+            # and using it results in fewer total coins than the previously known best:
             if i >= coin and dp[i - coin] + 1 < dp[i]:
-                dp[i] = dp[i - coin] + 1
-                coin_used[i] = coin
+                dp[i] = dp[i - coin] + 1 # Update the minimum coins needed
+                coin_used[i] = coin      # Record which coin was used to achieve this minimum
                 
+    # If the target amount remains infinity, there is no mathematical way to make exact change.
     if dp[amount] == float('inf'):
         return None
         
-    # Reconstruct the optimal coins used
+    # Reconstruct the list of optimal coins used by tracing back through the coin_used array
     result = []
     curr = amount
     while curr > 0:
-        result.append(coin_used[curr])
-        curr -= coin_used[curr]
+        result.append(coin_used[curr]) # Add the coin used to reach current amount
+        curr -= coin_used[curr]        # Step backwards by the coin's value
         
-    # Sort for consistent output comparison
+    # Sort in descending order to make the output format consistent with the greedy output
     return sorted(result, reverse=True)
 
 def analyze_system(coins, amount):
     """
-    Compares the Greedy approach vs the Optimal approach
+    Compares the Greedy approach versus the Optimal (DP) approach.
+    This function effectively tests whether the given coin system is "canonical"
+    for the specific budget provided.
     """
     print(f"--- Analyzing Change for {amount} with Denominations: {coins} ---")
     greedy = greedy_change(coins, amount)
