@@ -1,3 +1,7 @@
+"""Compute the change for different values of n with coins of different 
+denominations using the greedy algorithm and determine whether the smallest 
+number of coins was used. Can you find conditions so that the greedy algorithm 
+is guaranteed to use the fewest coins possible?"""
 def greedy_change(coins, amount):
     """
     Computes the change using the Greedy Algorithm.

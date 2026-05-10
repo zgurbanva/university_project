@@ -1,4 +1,4 @@
-
+"""Given positive integers m and n, interactively play the game of Chomp. """
 import sys
 import os
 
